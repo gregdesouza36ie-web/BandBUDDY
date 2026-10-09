@@ -22,6 +22,13 @@
       "when": 1791542315435,
       "tag": "0002_closed_genesis",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1791543279198,
+      "tag": "0003_many_monster_badoon",
+      "breakpoints": true
     }
   ]
 }

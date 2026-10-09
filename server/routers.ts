@@ -1,12 +1,17 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
   createEventSong,
+  acceptEventInvite,
+  createEventInvite,
   deleteEventSong,
   getEventWorkspace,
+  isEventOwner,
+  listEventInvites,
   listEventsForUser,
   recordActivity,
   updateEventSong,
@@ -29,6 +34,28 @@ export const appRouter = router({
     inspect: publicProcedure
       .input(z.object({ videoUrl: z.string().url() }))
       .mutation(({ input }) => inspectVideoUrl(input.videoUrl)),
+  }),
+  collaboration: router({
+    listInvites: protectedProcedure
+      .input(z.object({ eventId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        if (!(await isEventOwner(input.eventId, ctx.user.id))) throw new TRPCError({ code: "FORBIDDEN", message: "Only the event owner can manage invites." });
+        return listEventInvites(input.eventId);
+      }),
+    invite: protectedProcedure
+      .input(z.object({ eventId: z.number().int().positive(), email: z.string().email(), role: z.enum(["editor", "viewer"]).default("editor") }))
+      .mutation(async ({ ctx, input }) => {
+        if (!(await isEventOwner(input.eventId, ctx.user.id))) throw new TRPCError({ code: "FORBIDDEN", message: "Only the event owner can invite bandmates." });
+        const email = input.email.trim().toLowerCase();
+        const id = await createEventInvite({ eventId: input.eventId, email, role: input.role, invitedBy: ctx.user.id });
+        return { id, email, status: "pending" as const };
+      }),
+    acceptInvite: protectedProcedure
+      .input(z.object({ inviteId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        if (!ctx.user.email) return { accepted: false } as const;
+        return { accepted: await acceptEventInvite(input.inviteId, ctx.user.id, ctx.user.email.trim().toLowerCase()) } as const;
+      }),
   }),
   setlists: router({
     list: protectedProcedure.query(({ ctx }) => listEventsForUser(ctx.user.id)),

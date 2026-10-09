@@ -18,6 +18,7 @@ import {
   GripVertical,
   LayoutDashboard,
   Library,
+  Mail,
   MapPin,
   Menu,
   MoreHorizontal,
@@ -26,6 +27,7 @@ import {
   Play,
   Plus,
   Radio,
+  ShieldCheck,
   Settings2,
   Share2,
   Sparkles,
@@ -133,6 +135,7 @@ function getYouTubeDuration(videoUrl: string): Promise<number | null> {
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
   const inspectVideo = trpc.video.inspect.useMutation();
+  const inviteMutation = trpc.collaboration.invite.useMutation();
   const [songs, setSongs] = useState<Song[]>(initialSongs);
   const [isAdding, setIsAdding] = useState(false);
   const [addToSet, setAddToSet] = useState<SetName>("Set A");
@@ -149,6 +152,9 @@ export default function Home() {
   const [note, setNote] = useState("Open with Valerie — vocals should sit just behind the pocket.");
   const [activeNav, setActiveNav] = useState("Setlists");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [invitedEmails, setInvitedEmails] = useState<string[]>([]);
 
   const readyCount = useMemo(() => songs.filter(song => song.sourceKey !== "—" && song.singerKey !== "—").length, [songs]);
   const totalMinutes = useMemo(() => songs.reduce((total, song) => {
@@ -278,10 +284,34 @@ export default function Home() {
 
   const showComingSoon = (label: string) => toast.info(`${label} is coming next in the shared workspace.`);
 
+  const submitInvite = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const email = inviteEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error("Enter a valid email address.");
+      return;
+    }
+    if (invitedEmails.includes(email)) {
+      toast.info("That email already has access to this setlist.");
+      return;
+    }
+    if (isAuthenticated) {
+      try {
+        await inviteMutation.mutateAsync({ eventId: 1, email, role: "editor" });
+      } catch {
+        toast.error("The invite could not be saved. Please try again.");
+        return;
+      }
+    }
+    setInvitedEmails(current => [...current, email]);
+    setInviteEmail("");
+    toast.success(`Invite added for ${email}.`);
+  };
+
   const renderSongRow = (song: Song, index: number, setSongCount: number) => (
-    <div className={`song-row ${song.status === "needs-key" ? "needs-key" : ""} ${draggedSongId === song.id ? "is-dragged" : ""} ${dragOverSongId === song.id ? "is-drag-over" : ""}`} key={song.id} draggable onDragStart={event => { event.dataTransfer.effectAllowed = "move"; setDraggedSongId(song.id); }} onDragOver={event => { event.preventDefault(); setDragOverSongId(song.id); }} onDrop={event => { event.preventDefault(); dropSongOnSong(song); }} onDragEnd={() => { setDraggedSongId(null); setDragOverSongId(null); }}>
+    <div className={`song-row ${song.status === "needs-key" ? "needs-key" : ""} ${draggedSongId === song.id ? "is-dragged" : ""} ${dragOverSongId === song.id ? "is-drag-over" : ""}`} key={song.id} onDragOver={event => { event.preventDefault(); setDragOverSongId(song.id); }} onDrop={event => { event.preventDefault(); dropSongOnSong(song); }}>
       <div className="song-main">
-        <button className="drag-handle" onClick={() => toast.info("Use the up/down arrows to move this song.")} aria-label={`Reorder ${song.title}`}><GripVertical size={16} /></button>
+        <button className="drag-handle" draggable onClick={event => event.preventDefault()} onDragStart={event => { event.dataTransfer.effectAllowed = "move"; setDraggedSongId(song.id); }} onDragEnd={() => { setDraggedSongId(null); setDragOverSongId(null); }} aria-label={`Drag to reorder ${song.title}`}><GripVertical size={16} /></button>
         <div className="track-number">{String(index + 1).padStart(2, "0")}</div>
         <div className="song-copy"><strong>{song.title}</strong><span>{song.artist}</span></div>
         <button className="video-button" onClick={() => openVideo(song)} title={song.videoUrl ? "Open video reference" : "Add a video reference"}><Play size={13} fill="currentColor" /></button>
@@ -308,10 +338,10 @@ export default function Home() {
 
       <main className="app-main">
         <div className="mobile-topbar"><button className="icon-button" onClick={() => setMobileMenuOpen(true)} aria-label="Open navigation"><Menu size={20} /></button><p className="mobile-brand">Band<span>BUDDY</span></p><button className="avatar avatar-red avatar-button" onClick={() => showComingSoon("Profile settings")} aria-label="Open profile">{user?.name?.slice(0, 1).toUpperCase() || "G"}</button></div>
-        <header className="topbar"><div className="breadcrumbs"><span>The Afterhours</span><span className="breadcrumb-slash">/</span><strong>Setlists</strong><span className="breadcrumb-slash">/</span><strong>Summer Live</strong></div><div className="topbar-actions"><div className="live-presence"><span className="presence-dot" /> <span>3 online</span></div><button className="topbar-share" onClick={() => showComingSoon("Setlist sharing")}><Share2 size={15} /> Share</button>{!isAuthenticated && <Button className="sign-in-button" onClick={() => startLogin()}>Sign in to sync</Button>}</div></header>
+        <header className="topbar"><div className="breadcrumbs"><span>The Afterhours</span><span className="breadcrumb-slash">/</span><strong>Setlists</strong><span className="breadcrumb-slash">/</span><strong>Summer Live</strong></div><div className="topbar-actions"><div className="live-presence"><span className="presence-dot" /> <span>3 online</span></div><button className="topbar-share" onClick={() => setInviteOpen(true)}><Share2 size={15} /> Invite-only access</button>{!isAuthenticated && <Button className="sign-in-button" onClick={() => startLogin()}>Sign in to sync</Button>}</div></header>
 
         <div className="page-content">
-          <div className="page-heading"><div><p className="eyebrow"><span className="eyebrow-mark" /> Friday, 18 July 2026 <span className="eyebrow-separator">·</span> 8:00 PM</p><h1>Summer Live</h1><p className="page-subtitle">Build the night in order. Everyone sees the latest version.</p><div className="event-meta"><span><MapPin size={14} /> The Workman's Cellar</span><span><CalendarDays size={14} /> {songs.length} songs planned</span></div></div><div className="heading-actions"><Button variant="outline" className="soft-button" onClick={() => showComingSoon("Run-through mode")}><Play size={16} /> Run through</Button><Button className="primary-button" onClick={() => showComingSoon("Setlist sharing")}><UserRoundPlus size={16} /> Invite bandmates</Button></div></div>
+          <div className="page-heading"><div><p className="eyebrow"><span className="eyebrow-mark" /> Friday, 18 July 2026 <span className="eyebrow-separator">·</span> 8:00 PM</p><h1>Summer Live</h1><p className="page-subtitle">Build the night in order. Everyone sees the latest version.</p><div className="event-meta"><span><MapPin size={14} /> The Workman's Cellar</span><span><CalendarDays size={14} /> {songs.length} songs planned</span></div></div><div className="heading-actions"><Button variant="outline" className="soft-button" onClick={() => showComingSoon("Run-through mode")}><Play size={16} /> Run through</Button><Button className="primary-button" onClick={() => setInviteOpen(true)}><UserRoundPlus size={16} /> Invite bandmates</Button></div></div>
 
           <div className="workspace-grid"><section className="main-column"><div className="sync-banner"><div className="sync-banner-icon"><Radio size={17} /></div><div className="sync-banner-copy"><strong>{isAuthenticated ? "You're looking at the shared version" : "You're exploring a live setlist"}</strong><span>{isAuthenticated ? "Changes save for the whole band as you work." : "Sign in when you're ready to keep edits in sync across devices."}</span></div><div className="sync-banner-progress"><span>{readyCount}/{songs.length} ready</span><div className="progress-track"><div style={{ width: `${progress}%` }} /></div></div></div>
 
@@ -330,6 +360,7 @@ export default function Home() {
           <aside className="context-column"><div className="paper-panel side-panel members-panel"><div className="side-panel-heading"><div><p className="panel-eyebrow">In the room</p><h3>Bandmates <span>4</span></h3></div><button className="icon-button subtle" onClick={() => showComingSoon("Member invitations")} aria-label="Invite a member"><Plus size={17} /></button></div><div className="member-list">{members.map(member => <div className="member-row" key={member.name}><div className={`avatar avatar-${member.tone}`}>{member.initials}<span className={`online-indicator ${member.online ? "online" : ""}`} /></div><div className="member-copy"><strong>{member.name}</strong><span>{member.role}</span></div>{member.online && <span className="member-online">live</span>}</div>)}</div><button className="invite-link" onClick={() => showComingSoon("Member invitations")}><UserRoundPlus size={14} /> Invite a bandmate</button></div><div className="paper-panel side-panel activity-panel"><div className="side-panel-heading"><div><p className="panel-eyebrow">Live log</p><h3>Recent changes</h3></div><Activity size={17} className="heading-icon" /></div><div className="activity-list">{activity.map(item => <div className="activity-item" key={`${item.name}-${item.time}`}><div className={`avatar avatar-small avatar-${item.tone}`}>{item.initials}</div><div className="activity-copy"><p><strong>{item.name}</strong> {item.action}</p><span>{item.detail} <em>· {item.time}</em></span></div></div>)}</div><button className="activity-link" onClick={() => showComingSoon("Full activity log")}>See all activity <ArrowUpRight size={14} /></button></div><div className="notes-card"><div className="notes-header"><span className="notes-pin" /><p className="panel-eyebrow">Band note</p><span className="notes-saved">Saved</span></div><textarea value={note} onChange={event => setNote(event.target.value)} aria-label="Band note" /><div className="notes-footer"><span>Visible to all members</span><button onClick={() => toast.success("Band note saved.")}><Check size={13} /> Save note</button></div></div><div className="help-prompt"><div className="help-prompt-icon"><Music2 size={15} /></div><div><strong>Need a quick reset?</strong><span>Run the setlist from the top before doors.</span></div><button onClick={() => showComingSoon("Run-through mode")} aria-label="Open run-through mode"><ExternalLink size={15} /></button></div></aside>
           </div>
         </div>
+      {inviteOpen && <div className="invite-overlay" role="dialog" aria-modal="true" aria-labelledby="invite-title"><div className="invite-dialog"><div className="invite-dialog-header"><div className="invite-dialog-icon"><ShieldCheck size={19} /></div><button className="icon-button subtle" onClick={() => setInviteOpen(false)} aria-label="Close invite panel"><X size={18} /></button></div><p className="panel-eyebrow">Private workspace</p><h2 id="invite-title">Invite your bandmates</h2><p className="invite-dialog-copy">Only people whose email you add here can join this setlist. There is no public share link.</p><form className="invite-form" onSubmit={submitInvite}><label htmlFor="invite-email">Bandmate email</label><div className="invite-input-row"><Mail size={16} /><input id="invite-email" type="email" value={inviteEmail} onChange={event => setInviteEmail(event.target.value)} placeholder="name@example.com" autoFocus /><button type="submit" className="primary-button" disabled={inviteMutation.isPending}>Add invite</button></div></form><div className="invite-access-note"><ShieldCheck size={14} /><span>Invite-only access is enabled for this setlist.</span></div>{invitedEmails.length > 0 && <div className="invite-list"><p className="panel-eyebrow">Allowed emails</p>{invitedEmails.map(email => <div className="invite-row" key={email}><span className="invite-email-dot" /> <span>{email}</span><span className="invite-role">Editor</span></div>)}</div>}<button className="invite-close-button" onClick={() => setInviteOpen(false)}>Done</button></div></div>}
       </main>
     </div>
   );

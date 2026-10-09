@@ -1,11 +1,13 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   activity,
   bands,
   eventMembers,
+  eventInvites,
   events,
   InsertActivity,
+  InsertEventInvite,
   InsertSong,
   InsertUser,
   songs,
@@ -78,7 +80,7 @@ export async function listEventsForUser(userId: number) {
     .from(events)
     .leftJoin(bands, eq(events.bandId, bands.id))
     .leftJoin(eventMembers, eq(events.id, eventMembers.eventId))
-    .where(and(eq(events.createdBy, userId), eq(eventMembers.userId, userId)))
+    .where(or(eq(events.createdBy, userId), eq(eventMembers.userId, userId)))
     .orderBy(desc(events.eventDate), desc(events.updatedAt));
 }
 
@@ -90,7 +92,7 @@ export async function getEventWorkspace(eventId: number, userId: number) {
     .from(events)
     .leftJoin(bands, eq(events.bandId, bands.id))
     .leftJoin(eventMembers, eq(events.id, eventMembers.eventId))
-    .where(and(eq(events.id, eventId), eq(eventMembers.userId, userId)))
+    .where(and(eq(events.id, eventId), or(eq(events.createdBy, userId), eq(eventMembers.userId, userId))))
     .limit(1);
   if (!eventResult[0]) return null;
 
@@ -131,4 +133,39 @@ export async function recordActivity(entry: InsertActivity) {
   const db = await getDb();
   if (!db) return;
   await db.insert(activity).values(entry);
+}
+
+export async function listEventInvites(eventId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(eventInvites).where(eq(eventInvites.eventId, eventId)).orderBy(desc(eventInvites.createdAt));
+}
+
+export async function isEventOwner(eventId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return false;
+  const result = await db.select({ id: events.id }).from(events).where(and(eq(events.id, eventId), eq(events.createdBy, userId))).limit(1);
+  return Boolean(result[0]);
+}
+
+export async function createEventInvite(invite: InsertEventInvite) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const existing = await db.select().from(eventInvites).where(and(eq(eventInvites.eventId, invite.eventId), eq(eventInvites.email, invite.email))).limit(1);
+  if (existing[0]) {
+    await db.update(eventInvites).set({ role: invite.role, status: "pending", invitedBy: invite.invitedBy }).where(eq(eventInvites.id, existing[0].id));
+    return existing[0].id;
+  }
+  const result = await db.insert(eventInvites).values(invite);
+  return result[0].insertId;
+}
+
+export async function acceptEventInvite(inviteId: number, userId: number, email: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const invite = await db.select().from(eventInvites).where(and(eq(eventInvites.id, inviteId), eq(eventInvites.email, email), eq(eventInvites.status, "pending"))).limit(1);
+  if (!invite[0]) return false;
+  await db.insert(eventMembers).values({ eventId: invite[0].eventId, userId, role: invite[0].role }).onDuplicateKeyUpdate({ set: { role: invite[0].role } });
+  await db.update(eventInvites).set({ status: "accepted", acceptedAt: new Date() }).where(eq(eventInvites.id, inviteId));
+  return true;
 }

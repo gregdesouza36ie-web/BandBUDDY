@@ -88,6 +88,26 @@ export const eventMembers = mysqlTable(
 export type EventMember = typeof eventMembers.$inferSelect;
 export type InsertEventMember = typeof eventMembers.$inferInsert;
 
+export const eventInvites = mysqlTable(
+  "event_invites",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    eventId: int("eventId").notNull(),
+    email: varchar("email", { length: 320 }).notNull(),
+    role: mysqlEnum("role", ["editor", "viewer"]).default("editor").notNull(),
+    status: mysqlEnum("status", ["pending", "accepted", "revoked"]).default("pending").notNull(),
+    invitedBy: int("invitedBy").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    acceptedAt: timestamp("acceptedAt"),
+  },
+  table => ({
+    eventEmailUnique: uniqueIndex("event_invites_event_email_unique").on(table.eventId, table.email),
+  })
+);
+
+export type EventInvite = typeof eventInvites.$inferSelect;
+export type InsertEventInvite = typeof eventInvites.$inferInsert;
+
 export const songs = mysqlTable("songs", {
   id: int("id").autoincrement().primaryKey(),
   eventId: int("eventId").notNull(),

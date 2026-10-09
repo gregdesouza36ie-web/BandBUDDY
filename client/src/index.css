@@ -174,7 +174,8 @@ h2 span, h3 span { margin-left: 5px; color: #a79472; font-family: "IBM Plex Mono
 .song-row { display: grid; grid-template-columns: minmax(280px, 1fr) 155px 155px 45px; align-items: center; gap: 9px; min-height: 69px; padding: 9px 17px 9px 9px; border-bottom: 1px solid #e7dac0; transition: background .16s, transform .16s; }
 .song-row:hover { background: rgba(255, 251, 237, .75); }
 .song-row.needs-key { background: rgba(253, 240, 221, .48); }
-.song-row[draggable="true"] { cursor: grab; }
+.drag-handle { cursor: grab; }
+.drag-handle:active { cursor: grabbing; }
 .song-row.is-dragged { opacity: .42; }
 .song-row.is-drag-over { border-top: 2px solid #a63d40; background: #fff2de; }
 .set-section:has(.is-dragged) .set-section-heading { background: #f2e1cd; }
@@ -259,6 +260,25 @@ h2 span, h3 span { margin-left: 5px; color: #a79472; font-family: "IBM Plex Mono
 .metadata-status.loading { color: #6d837c; }
 .metadata-status.error { color: #a63d40; }
 .metadata-status.ready { color: #5c8c7b; }
+.invite-overlay { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: rgba(22, 43, 59, .42); backdrop-filter: blur(3px); }
+.invite-dialog { width: min(100%, 470px); padding: 25px; color: #344b59; border: 1px solid #dbc8a7; border-radius: 9px; background: #fff8e9; box-shadow: 0 20px 60px rgba(40, 45, 41, .25); }
+.invite-dialog-header { display: flex; align-items: center; justify-content: space-between; }
+.invite-dialog-icon { width: 35px; height: 35px; display: grid; place-items: center; color: #fff8e9; border-radius: 6px; background: #6d9a8b; }
+.invite-dialog h2 { margin: 4px 0 7px; color: #18384d; font-family: "Bricolage Grotesque", sans-serif; font-size: 25px; letter-spacing: -.04em; }
+.invite-dialog-copy { max-width: 380px; margin: 0 0 20px; color: #8b806d; font-size: 11px; line-height: 1.55; }
+.invite-form label { display: block; margin-bottom: 7px; color: #82765f; font-family: "IBM Plex Mono", monospace; font-size: 8px; text-transform: uppercase; }
+.invite-input-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 4px 5px 4px 9px; border: 1px solid #d8c5a4; border-radius: 6px; background: #fffdf6; }
+.invite-input-row > svg { color: #a63d40; }
+.invite-input-row input { min-width: 0; height: 31px; padding: 0; color: #365063; border: 0; outline: 0; background: transparent; font-size: 11px; }
+.invite-input-row .primary-button { height: 30px; padding: 0 10px; font-size: 9px; }
+.invite-access-note { display: flex; align-items: center; gap: 6px; margin: 16px 0; padding: 9px 10px; color: #5e897b; border-radius: 5px; background: #e4f0e8; font-family: "IBM Plex Mono", monospace; font-size: 8px; }
+.invite-list { padding-top: 13px; border-top: 1px solid #e4d8c1; }
+.invite-list > .panel-eyebrow { margin-bottom: 7px; }
+.invite-row { display: flex; align-items: center; gap: 7px; padding: 7px 0; color: #4e6470; font-size: 10px; }
+.invite-email-dot { width: 7px; height: 7px; border-radius: 50%; background: #a63d40; }
+.invite-role { margin-left: auto; color: #9d9075; font-family: "IBM Plex Mono", monospace; font-size: 8px; text-transform: uppercase; }
+.invite-close-button { width: 100%; height: 34px; margin-top: 16px; color: #7e705b; border: 1px solid #dac6a6; border-radius: 5px; background: transparent; font-family: "IBM Plex Mono", monospace; font-size: 9px; }
+.invite-close-button:hover { color: #a63d40; border-color: #b9857e; background: #fff1df; }
 .add-form-actions { display: flex; justify-content: flex-end; gap: 5px; margin-top: 12px; }
 .cancel-button { height: 31px !important; color: #8d836e !important; font-size: 10px !important; }
 .add-form-actions .primary-button { height: 31px !important; }
@@ -374,6 +394,9 @@ h3 { margin: 0; color: #203b4f; font-size: 17px; letter-spacing: -.035em; font-w
   .song-status { width: 22px; height: 22px; }
   .add-form-fields { grid-template-columns: 1fr; }
   .set-form-select { width: 100%; }
+  .invite-dialog { padding: 20px; }
+  .invite-input-row { grid-template-columns: 18px minmax(0, 1fr); }
+  .invite-input-row .primary-button { grid-column: 1 / -1; width: 100%; }
   .add-form-fields .video-input { grid-column: auto; }
   .context-column { display: flex; }
   .members-panel, .activity-panel { width: 100%; }
