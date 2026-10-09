@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { startLogin } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
 import {
   Activity,
   ArrowDown,
@@ -72,14 +73,77 @@ const activity = [
   { name: "Mark", initials: "M", tone: "blue", action: "shared a video link", detail: "Sweet Home Chicago", time: "42m" },
 ];
 
+function extractYouTubeId(value: string) {
+  const match = value.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{11})/i);
+  return match?.[1] ?? null;
+}
+
+function formatDuration(totalSeconds: number) {
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function getYouTubeDuration(videoUrl: string): Promise<number | null> {
+  const videoId = extractYouTubeId(videoUrl);
+  if (!videoId || typeof window === "undefined") return Promise.resolve(null);
+
+  return new Promise(resolve => {
+    const host = document.createElement("div");
+    host.setAttribute("aria-hidden", "true");
+    host.style.position = "fixed";
+    host.style.width = "1px";
+    host.style.height = "1px";
+    host.style.opacity = "0";
+    host.style.pointerEvents = "none";
+    host.style.left = "-10000px";
+    document.body.appendChild(host);
+    let settled = false;
+    let player: { getDuration?: () => number; destroy?: () => void } | undefined;
+    const finish = (duration: number | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      player?.destroy?.();
+      host.remove();
+      resolve(duration && duration > 0 ? duration : null);
+    };
+    const createPlayer = () => {
+      const api = (window as typeof window & { YT?: { Player?: new (element: HTMLElement, options: unknown) => typeof player } }).YT;
+      if (!api?.Player) return finish(null);
+      player = new api.Player(host, { videoId, events: { onReady: (event: { target: { getDuration: () => number } }) => finish(event.target.getDuration()) } });
+    };
+    const timeout = window.setTimeout(() => finish(null), 10000);
+    const youtubeWindow = window as typeof window & { YT?: unknown; onYouTubeIframeAPIReady?: () => void };
+    if ((youtubeWindow.YT as { Player?: unknown } | undefined)?.Player) {
+      createPlayer();
+      return;
+    }
+    const previousReady = youtubeWindow.onYouTubeIframeAPIReady;
+    youtubeWindow.onYouTubeIframeAPIReady = () => { previousReady?.(); createPlayer(); };
+    if (!document.getElementById("youtube-iframe-api")) {
+      const script = document.createElement("script");
+      script.id = "youtube-iframe-api";
+      script.src = "https://www.youtube.com/iframe_api";
+      script.async = true;
+      document.head.appendChild(script);
+    }
+  });
+}
+
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
+  const inspectVideo = trpc.video.inspect.useMutation();
   const [songs, setSongs] = useState<Song[]>(initialSongs);
   const [isAdding, setIsAdding] = useState(false);
   const [addToSet, setAddToSet] = useState<SetName>("Set A");
   const [newTitle, setNewTitle] = useState("");
   const [newArtist, setNewArtist] = useState("");
   const [newVideoUrl, setNewVideoUrl] = useState("");
+  const [newDuration, setNewDuration] = useState("—");
+  const [newSourceKey, setNewSourceKey] = useState("—");
+  const [metadataStatus, setMetadataStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [draggedSongId, setDraggedSongId] = useState<number | null>(null);
+  const [dragOverSongId, setDragOverSongId] = useState<number | null>(null);
   const [editingSongId, setEditingSongId] = useState<number | null>(null);
   const [linkDraft, setLinkDraft] = useState("");
   const [note, setNote] = useState("Open with Valerie — vocals should sit just behind the pocket.");
@@ -123,6 +187,48 @@ export default function Home() {
     });
   };
 
+  const dropSongOnSong = (targetSong: Song) => {
+    if (draggedSongId === null || draggedSongId === targetSong.id) return;
+    setSongs(current => {
+      const dragged = current.find(song => song.id === draggedSongId);
+      if (!dragged) return current;
+      const withoutDragged = current.filter(song => song.id !== draggedSongId);
+      const targetIndex = withoutDragged.findIndex(song => song.id === targetSong.id);
+      if (targetIndex < 0) return current;
+      withoutDragged.splice(targetIndex, 0, { ...dragged, setName: targetSong.setName });
+      return withoutDragged;
+    });
+    setDraggedSongId(null);
+    setDragOverSongId(null);
+  };
+
+  const dropSongOnSet = (setName: SetName) => {
+    if (draggedSongId === null) return;
+    setSongs(current => current.map(song => song.id === draggedSongId ? { ...song, setName } : song));
+    setDraggedSongId(null);
+    setDragOverSongId(null);
+  };
+
+  const inspectNewVideo = async (value: string) => {
+    const url = value.trim();
+    if (!/^https?:\/\//i.test(url) || inspectVideo.isPending) return;
+    setMetadataStatus("loading");
+    try {
+      const metadata = await inspectVideo.mutateAsync({ videoUrl: url });
+      const titleParts = metadata.title?.split(" - ") ?? [];
+      if (!newTitle.trim() && metadata.title) setNewTitle(titleParts.length > 1 ? titleParts.slice(1).join(" - ").replace(/\s*\([^)]*\)\s*$/, "") : metadata.title);
+      if (!newArtist.trim() && (metadata.artist || titleParts.length > 1)) setNewArtist(titleParts.length > 1 ? titleParts[0] : metadata.artist || "");
+      if (metadata.sourceKey) setNewSourceKey(metadata.sourceKey);
+      const duration = await getYouTubeDuration(url);
+      if (duration) setNewDuration(formatDuration(duration));
+      setMetadataStatus("ready");
+      toast.success(duration ? "Song details and duration found." : "Song title found. Duration is still loading from the player.");
+    } catch {
+      setMetadataStatus("error");
+      toast.error("We couldn't read that video link. You can still fill the song in manually.");
+    }
+  };
+
   const beginLinkEdit = (song: Song) => {
     setEditingSongId(song.id);
     setLinkDraft(song.videoUrl);
@@ -151,9 +257,9 @@ export default function Home() {
     }
     setSongs(current => [...current, {
       id: Date.now(), title: newTitle.trim(), artist: newArtist.trim() || "New addition", videoUrl: newVideoUrl.trim(),
-      sourceKey: "—", singerKey: "—", duration: "—", setName: addToSet, status: "needs-key",
+      sourceKey: newSourceKey, singerKey: "—", duration: newDuration, setName: addToSet, status: "needs-key",
     }]);
-    setNewTitle(""); setNewArtist(""); setNewVideoUrl(""); setIsAdding(false);
+    setNewTitle(""); setNewArtist(""); setNewVideoUrl(""); setNewDuration("—"); setNewSourceKey("—"); setMetadataStatus("idle"); setIsAdding(false);
     toast.success(`Song added to ${addToSet}.`);
   };
 
@@ -173,7 +279,7 @@ export default function Home() {
   const showComingSoon = (label: string) => toast.info(`${label} is coming next in the shared workspace.`);
 
   const renderSongRow = (song: Song, index: number, setSongCount: number) => (
-    <div className={`song-row ${song.status === "needs-key" ? "needs-key" : ""}`} key={song.id}>
+    <div className={`song-row ${song.status === "needs-key" ? "needs-key" : ""} ${draggedSongId === song.id ? "is-dragged" : ""} ${dragOverSongId === song.id ? "is-drag-over" : ""}`} key={song.id} draggable onDragStart={event => { event.dataTransfer.effectAllowed = "move"; setDraggedSongId(song.id); }} onDragOver={event => { event.preventDefault(); setDragOverSongId(song.id); }} onDrop={event => { event.preventDefault(); dropSongOnSong(song); }} onDragEnd={() => { setDraggedSongId(null); setDragOverSongId(null); }}>
       <div className="song-main">
         <button className="drag-handle" onClick={() => toast.info("Use the up/down arrows to move this song.")} aria-label={`Reorder ${song.title}`}><GripVertical size={16} /></button>
         <div className="track-number">{String(index + 1).padStart(2, "0")}</div>
@@ -214,9 +320,9 @@ export default function Home() {
               <div className="set-tabs" aria-label="Set sections">{songsBySet.map(({ setName, songs: setSongs }) => <button key={setName} className={`set-tab ${addToSet === setName ? "active" : ""}`} onClick={() => setAddToSet(setName)}><span className="set-tab-mark">{setName.slice(-1)}</span><span>{setName}</span><b>{setSongs.length}</b></button>)}</div>
               <div className="setlist-summary"><span><Clock3 size={13} /> {Math.round(totalMinutes)} min total</span><span><Check size={13} /> {readyCount} songs ready</span><span className="summary-note">Last edited 2 min ago</span></div>
               <div className="setlist-table-head"><span className="head-track">Track</span><span>Source key <em>auto</em></span><span>Singer key <em>manual</em></span><span aria-hidden="true" /></div>
-              <div className="song-list">{songsBySet.map(({ setName, songs: setSongs }) => <section className="set-section" key={setName}><div className="set-section-heading"><div className="set-title-lockup"><span className={`set-section-marker ${setName === "Set A" ? "set-a" : setName === "Set B" ? "set-b" : "set-c"}`}>{setName.slice(-1)}</span><div><strong>{setName}</strong><span>{setSongs.length ? `${setSongs.length} ${setSongs.length === 1 ? "song" : "songs"}` : "No songs yet"}</span></div></div><button className="set-add-button" onClick={() => { setAddToSet(setName); setIsAdding(true); }}><Plus size={13} /> Add to {setName}</button></div>{setSongs.length ? setSongs.map((song, index) => renderSongRow(song, index, setSongs.length)) : <button className="empty-set" onClick={() => { setAddToSet(setName); setIsAdding(true); }}><Plus size={15} /><span>Add the first song to {setName}</span><small>Keep the night moving</small></button>}</section>)}</div>
+              <div className="song-list">{songsBySet.map(({ setName, songs: setSongs }) => <section className="set-section" key={setName} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); dropSongOnSet(setName); }}><div className="set-section-heading"><div className="set-title-lockup"><span className={`set-section-marker ${setName === "Set A" ? "set-a" : setName === "Set B" ? "set-b" : "set-c"}`}>{setName.slice(-1)}</span><div><strong>{setName}</strong><span>{setSongs.length ? `${setSongs.length} ${setSongs.length === 1 ? "song" : "songs"}` : "No songs yet"}</span></div></div><button className="set-add-button" onClick={() => { setAddToSet(setName); setIsAdding(true); }}><Plus size={13} /> Add to {setName}</button></div>{setSongs.length ? setSongs.map((song, index) => renderSongRow(song, index, setSongs.length)) : <button className="empty-set" onClick={() => { setAddToSet(setName); setIsAdding(true); }}><Plus size={15} /><span>Add the first song to {setName}</span><small>Drop a song here or add one</small></button>}</section>)}</div>
 
-              {isAdding ? <form className="add-song-form" onSubmit={addSong}><div className="add-form-title"><span className="add-form-number">{String(songs.length + 1).padStart(2, "0")}</span><div><strong>Add a song to {addToSet}</strong><span>Drop in the essentials — keys can come later.</span></div></div><div className="add-form-fields"><Input autoFocus placeholder="Song name" value={newTitle} onChange={event => setNewTitle(event.target.value)} aria-label="Song name" /><Input placeholder="Artist (optional)" value={newArtist} onChange={event => setNewArtist(event.target.value)} aria-label="Artist" /><Input className="video-input" placeholder="Video link (optional)" value={newVideoUrl} onChange={event => setNewVideoUrl(event.target.value)} aria-label="Video link" /><select className="set-form-select" value={addToSet} onChange={event => setAddToSet(event.target.value as SetName)} aria-label="Set section">{setNames.map(setName => <option key={setName} value={setName}>{setName}</option>)}</select></div><div className="add-form-actions"><Button type="button" variant="ghost" className="cancel-button" onClick={() => setIsAdding(false)}>Cancel</Button><Button type="submit" className="primary-button" size="sm"><Plus size={15} /> Add song</Button></div></form> : <button className="add-song-trigger" onClick={() => setIsAdding(true)}><span><Plus size={17} /></span><strong>Add song to {addToSet}</strong><small>⌘ ↵</small></button>}
+              {isAdding ? <form className="add-song-form" onSubmit={addSong}><div className="add-form-title"><span className="add-form-number">{String(songs.length + 1).padStart(2, "0")}</span><div><strong>Add a song to {addToSet}</strong><span>Paste a video link and BandBUDDY will fill what it can.</span></div></div><div className="add-form-fields"><Input autoFocus placeholder="Song name" value={newTitle} onChange={event => setNewTitle(event.target.value)} aria-label="Song name" /><Input placeholder="Artist (optional)" value={newArtist} onChange={event => setNewArtist(event.target.value)} aria-label="Artist" /><Input className="video-input" placeholder="Paste a YouTube or video link" value={newVideoUrl} onChange={event => setNewVideoUrl(event.target.value)} onBlur={event => void inspectNewVideo(event.target.value)} onPaste={event => { const pasted = event.clipboardData.getData("text"); window.setTimeout(() => void inspectNewVideo(pasted), 0); }} aria-label="Video link" /><select className="set-form-select" value={addToSet} onChange={event => setAddToSet(event.target.value as SetName)} aria-label="Set section">{setNames.map(setName => <option key={setName} value={setName}>{setName}</option>)}</select></div><div className={`metadata-status ${metadataStatus}`}><Sparkles size={13} /><span>{metadataStatus === "loading" ? "Reading video metadata…" : metadataStatus === "ready" ? `Auto-filled · ${newDuration !== "—" ? newDuration : "duration pending"} · key analysis pending` : metadataStatus === "error" ? "Could not read this link — fields are still editable." : "Paste a link to auto-fill the song details."}</span></div><div className="add-form-actions"><Button type="button" variant="ghost" className="cancel-button" onClick={() => setIsAdding(false)}>Cancel</Button><Button type="submit" className="primary-button" size="sm"><Plus size={15} /> Add song</Button></div></form> : <button className="add-song-trigger" onClick={() => setIsAdding(true)}><span><Plus size={17} /></span><strong>Add song to {addToSet}</strong><small>⌘ ↵</small></button>}
             </div>
             <div className="analysis-note"><div className="analysis-note-icon"><Sparkles size={15} /></div><p><strong>Source keys are detected from each video.</strong> <span>When a reference is ready, the auto key appears here. The singer's key stays yours to choose.</span></p><button onClick={() => showComingSoon("Key analysis details")}><ArrowUpRight size={15} /></button></div>
           </section>

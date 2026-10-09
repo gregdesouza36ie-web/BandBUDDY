@@ -11,6 +11,7 @@ import {
   recordActivity,
   updateEventSong,
 } from "./db";
+import { inspectVideoUrl } from "./videoMetadata";
 
 const keySchema = z.string().max(12).nullable().optional();
 
@@ -23,6 +24,11 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+  }),
+  video: router({
+    inspect: publicProcedure
+      .input(z.object({ videoUrl: z.string().url() }))
+      .mutation(({ input }) => inspectVideoUrl(input.videoUrl)),
   }),
   setlists: router({
     list: protectedProcedure.query(({ ctx }) => listEventsForUser(ctx.user.id)),
