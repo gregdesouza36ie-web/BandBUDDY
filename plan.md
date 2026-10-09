@@ -21,9 +21,9 @@ BandBUDDY is a collaborative rehearsal-room workspace for bandmates who need to 
 
 ## Implementation approach
 
-1. **Workbench UI:** replace the starter home screen with a responsive BandBUDDY dashboard for one event setlist. Include navigation, event selector, setlist stats, editable song rows, add-song flow, source/manual key dropdowns, reorder affordances, video links, member avatars, and activity feed.
+1. **Workbench UI:** replace the starter home screen with a responsive BandBUDDY dashboard for one event setlist. Include navigation, event selector, setlist stats, editable song rows, add-song flow, editable video links, source/manual key dropdowns, Set A/Set B/Set C grouping, set-aware reorder controls, video links, member avatars, and activity feed.
 2. **State model:** keep the first pass usable immediately with local optimistic state for the workbench. Shape all records to match the database model so the UI can move to tRPC persistence without a visual rewrite.
-3. **Database foundation:** extend the Drizzle schema with bands, band members, events/setlists, event members, songs, and activity records. Keep user identity backed by the starter Manus OAuth flow.
+3. **Database foundation:** extend the Drizzle schema with bands, band members, events/setlists, event members, songs, song set assignments, and activity records. Keep user identity backed by the starter Manus OAuth flow.
 4. **Server boundary:** add typed setlist procedures for listing events, reading an event workspace, creating/updating songs, deleting songs, and recording activity. The source-key analyzer remains a dedicated server procedure boundary so a real audio/video analysis provider can be added without coupling the UI to it; the UI already expresses the detected-versus-performance-key distinction.
 5. **Routing and runtime:** retain the single `/` workspace route for this first vertical slice and publish `/manus-routes.json` with the complete route set. Use the managed server/database configuration already selected during initialization.
 6. **Repository workflow:** develop in the initialized managed project, then sync the working implementation to the BandBUDDY GitHub repository as the canonical project handoff after checks pass.

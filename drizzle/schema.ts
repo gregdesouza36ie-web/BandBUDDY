@@ -92,6 +92,7 @@ export const songs = mysqlTable("songs", {
   id: int("id").autoincrement().primaryKey(),
   eventId: int("eventId").notNull(),
   position: int("position").default(0).notNull(),
+  setName: varchar("setName", { length: 16 }).default("Set A").notNull(),
   title: varchar("title", { length: 180 }).notNull(),
   artist: varchar("artist", { length: 160 }),
   videoUrl: text("videoUrl"),

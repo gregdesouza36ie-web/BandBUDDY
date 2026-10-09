@@ -1,0 +1,1 @@
+ALTER TABLE `songs` ADD `setName` varchar(16) DEFAULT 'Set A' NOT NULL;

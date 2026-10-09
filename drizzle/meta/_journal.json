@@ -15,6 +15,13 @@
       "when": 1791541896258,
       "tag": "0001_neat_shen",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1791542315435,
+      "tag": "0002_closed_genesis",
+      "breakpoints": true
     }
   ]
 }

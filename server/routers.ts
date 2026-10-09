@@ -33,6 +33,7 @@ export const appRouter = router({
       .input(
         z.object({
           eventId: z.number().int().positive(),
+          setName: z.enum(["Set A", "Set B", "Set C"]).default("Set A"),
           title: z.string().trim().min(1).max(180),
           artist: z.string().trim().max(160).nullable().optional(),
           videoUrl: z.string().url().nullable().optional(),
@@ -65,6 +66,7 @@ export const appRouter = router({
         z.object({
           eventId: z.number().int().positive(),
           songId: z.number().int().positive(),
+          setName: z.enum(["Set A", "Set B", "Set C"]).optional(),
           title: z.string().trim().min(1).max(180).optional(),
           artist: z.string().trim().max(160).nullable().optional(),
           videoUrl: z.string().url().nullable().optional(),
