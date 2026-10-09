@@ -175,7 +175,7 @@ export default function Home() {
   const renderSongRow = (song: Song, index: number, setSongCount: number) => (
     <div className={`song-row ${song.status === "needs-key" ? "needs-key" : ""}`} key={song.id}>
       <div className="song-main">
-        <button className="drag-handle" onClick={() => showComingSoon("Drag to reorder")} aria-label={`Reorder ${song.title}`}><GripVertical size={16} /></button>
+        <button className="drag-handle" onClick={() => toast.info("Use the up/down arrows to move this song.")} aria-label={`Reorder ${song.title}`}><GripVertical size={16} /></button>
         <div className="track-number">{String(index + 1).padStart(2, "0")}</div>
         <div className="song-copy"><strong>{song.title}</strong><span>{song.artist}</span></div>
         <button className="video-button" onClick={() => openVideo(song)} title={song.videoUrl ? "Open video reference" : "Add a video reference"}><Play size={13} fill="currentColor" /></button>
@@ -210,7 +210,7 @@ export default function Home() {
           <div className="workspace-grid"><section className="main-column"><div className="sync-banner"><div className="sync-banner-icon"><Radio size={17} /></div><div className="sync-banner-copy"><strong>{isAuthenticated ? "You're looking at the shared version" : "You're exploring a live setlist"}</strong><span>{isAuthenticated ? "Changes save for the whole band as you work." : "Sign in when you're ready to keep edits in sync across devices."}</span></div><div className="sync-banner-progress"><span>{readyCount}/{songs.length} ready</span><div className="progress-track"><div style={{ width: `${progress}%` }} /></div></div></div>
 
             <div className="paper-panel setlist-panel">
-              <div className="panel-heading"><div><p className="panel-eyebrow">Running order</p><h2>Setlist <span>{songs.length}</span></h2></div><div className="panel-heading-actions"><button className="small-action" onClick={() => showComingSoon("Setlist sort")}><GripVertical size={15} /> Reorder</button><button className="icon-button subtle" onClick={() => showComingSoon("Setlist options")} aria-label="Setlist options"><MoreHorizontal size={18} /></button></div></div>
+              <div className="panel-heading"><div><p className="panel-eyebrow">Running order</p><h2>Setlist <span>{songs.length}</span></h2></div><div className="panel-heading-actions"><button className="small-action" onClick={() => toast.info("Use the up/down arrows on a song row to change its order.")}><GripVertical size={15} /> Reorder</button><button className="icon-button subtle" onClick={() => showComingSoon("Setlist options")} aria-label="Setlist options"><MoreHorizontal size={18} /></button></div></div>
               <div className="set-tabs" aria-label="Set sections">{songsBySet.map(({ setName, songs: setSongs }) => <button key={setName} className={`set-tab ${addToSet === setName ? "active" : ""}`} onClick={() => setAddToSet(setName)}><span className="set-tab-mark">{setName.slice(-1)}</span><span>{setName}</span><b>{setSongs.length}</b></button>)}</div>
               <div className="setlist-summary"><span><Clock3 size={13} /> {Math.round(totalMinutes)} min total</span><span><Check size={13} /> {readyCount} songs ready</span><span className="summary-note">Last edited 2 min ago</span></div>
               <div className="setlist-table-head"><span className="head-track">Track</span><span>Source key <em>auto</em></span><span>Singer key <em>manual</em></span><span aria-hidden="true" /></div>
